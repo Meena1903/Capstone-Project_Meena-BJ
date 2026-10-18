@@ -2,7 +2,7 @@
 
 ## Overview
 One repository, four connected Parts built on synthetic (fictional) Instamart data. All money is in INR.
-- **Part A** audits and cleans the raw exports and stores them in SQLite (`data/instamart.db`).
+- **Part A** audits raw exports from `data/raw/`, cleans them into `data/clean/`, and stores them in `data/instamart.db`.
 - **Part B** segments customers (RFM + K-means) and predicts lapse.
 - **Part C** triages support tickets with privacy and output guardrails.
 - **Part D** answers policy questions (RAG) and runs a refund agent.
@@ -17,11 +17,11 @@ Run from the repository root (Python 3.11+).
 4. `pip freeze > requirements.txt`
 5. `python generate_data.py`
 6. `python check_setup.py`   (prints SETUP OK)
-7. `python a1_audit.py`   (Part A audit)
-8. `python a2_clean.py`   (Part A cleaning, CSVs and database)
-9. `python a3_validate.py`   (prints ALL CHECKPOINTS PASSED)
-10. `python a4_sql.py`   (runs `sql/queries.sql`)
-11. `python a5_pandas.py`   (pandas cross-check and exploratory analysis)
+7. `python PartA/src/a1_audit.py`   (Part A audit)
+8. `python PartA/src/a2_clean.py`   (Part A cleaning, CSVs and database)
+9. `python PartA/src/a3_validate.py`   (prints ALL CHECKPOINTS PASSED)
+10. `python PartA/src/a4_sql.py`   (runs `sql/queries.sql`)
+11. `python PartA/src/a5_pandas.py`   (pandas cross-check and exploratory analysis)
 
 <!-- Part B, C, D commands are added here as they are built -->
 
@@ -73,9 +73,9 @@ Counts for rules 4 and 5a are lower than the audit (120 and 106) because rule 2 
 Result: 12,309 rows (one per order_id); 11,110 completed, 1,199 cancelled, 0 pending; 0 missing `order_amount`; completed revenue INR 2,998,668.80.
 
 ### A3. Storage and validation
-`a2_clean.py` writes `data/clean/customers.csv`, `products.csv`, `orders.csv` and the SQLite database `data/instamart.db` with tables `customers`, `products`, `orders` (`order_ts` stored as text `YYYY-MM-DD HH:MM:SS`). `a3_validate.py` reads the database and checks 14 reference checkpoints (cities, genders, ages, row counts, status counts, missing values, revenue sum). It prints `ALL CHECKPOINTS PASSED`.
+`PartA/src/a2_clean.py` reads the raw CSVs from root `data/raw/`, writes `data/clean/customers.csv`, `products.csv`, `orders.csv`, and creates `data/instamart.db` with tables `customers`, `products`, `orders` (`order_ts` stored as text `YYYY-MM-DD HH:MM:SS`). Policy files remain in root `data/policies/`. `PartA/src/a3_validate.py` reads the database and checks 14 reference checkpoints (cities, genders, ages, row counts, status counts, missing values, revenue sum). It prints `ALL CHECKPOINTS PASSED`.
 
-### A4. SQL analysis (`sql/queries.sql`, run by `a4_sql.py`)
+### A4. SQL analysis (`sql/queries.sql`, run by `PartA/src/a4_sql.py`)
 | Query | Concept | Result |
 |---|---|---|
 | Q1 | WHERE then HAVING | 30 customers |

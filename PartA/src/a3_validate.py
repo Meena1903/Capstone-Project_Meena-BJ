@@ -1,9 +1,11 @@
 """A4 - Validate the clean data in data/instamart.db against the brief's checkpoints.
-Run from repo root:  python a3_validate.py"""
+Run: python PartA/src/a3_validate.py"""
+from pathlib import Path
 import sqlite3
 import pandas as pd
 
-con = sqlite3.connect("data/instamart.db")
+ROOT = Path(__file__).resolve().parents[2]
+con = sqlite3.connect(ROOT / "data/instamart.db")
 c = pd.read_sql_query("SELECT * FROM customers", con)
 o = pd.read_sql_query("SELECT * FROM orders", con)
 con.close()

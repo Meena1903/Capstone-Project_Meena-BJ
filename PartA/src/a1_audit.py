@@ -1,13 +1,15 @@
-"""A1 - Audit the raw data. Run from repo root:  python src/a1_audit.py"""
+"""A1 - Audit the raw data. Run: python PartA/src/a1_audit.py"""
+from pathlib import Path
 import pandas as pd
 
-RAW = "data/raw/"
+ROOT = Path(__file__).resolve().parents[2]
+RAW = ROOT / "data" / "raw"
 
 # ---- 1. Standard load: shape, dtypes, missing values per column ----------
 tables = {
-    "orders":    pd.read_csv(RAW + "orders.csv"),
-    "customers": pd.read_csv(RAW + "customers.csv"),
-    "products":  pd.read_csv(RAW + "products.csv"),
+    "orders":    pd.read_csv(RAW / "orders.csv"),
+    "customers": pd.read_csv(RAW / "customers.csv"),
+    "products":  pd.read_csv(RAW / "products.csv"),
 }
 for name, df in tables.items():
     print(f"\n=== {name}: shape {df.shape} ===")
@@ -21,8 +23,8 @@ for name, df in tables.items():
 # ---- 2. Raw-string load: keeps "N/A" and "" exactly as written ------------
 # (pandas' default read turns the text "N/A" into NaN, which would hide the
 #  120 unparseable amounts, so for the specific audit figures we read as text)
-o = pd.read_csv(RAW + "orders.csv", dtype=str, keep_default_na=False)
-c = pd.read_csv(RAW + "customers.csv", dtype=str, keep_default_na=False)
+o = pd.read_csv(RAW / "orders.csv", dtype=str, keep_default_na=False)
+c = pd.read_csv(RAW / "customers.csv", dtype=str, keep_default_na=False)
 
 amount_num = pd.to_numeric(o["order_amount"], errors="coerce")
 deliv_num = pd.to_numeric(o["delivery_minutes"], errors="coerce")

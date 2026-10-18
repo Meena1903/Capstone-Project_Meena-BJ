@@ -1,16 +1,18 @@
 """A2-A4 - Clean customers + orders, then store CSVs and SQLite DB.
-Run from repo root:  python a2_clean.py"""
+Run: python PartA/src/a2_clean.py"""
 import os, sqlite3
+from pathlib import Path
 import pandas as pd
 
-RAW, CLEAN, DB = "data/raw/", "data/clean/", "data/instamart.db"
-os.makedirs(CLEAN, exist_ok=True)
+ROOT = Path(__file__).resolve().parents[2]
+RAW, CLEAN, DB = ROOT / "data/raw", ROOT / "data/clean", ROOT / "data/instamart.db"
+CLEAN.mkdir(parents=True, exist_ok=True)
 log = {}   # rows/values changed per rule -> copy into README
 
-products = pd.read_csv(RAW + "products.csv")
+products = pd.read_csv(RAW / "products.csv")
 
 # ======================= CUSTOMERS =======================
-c = pd.read_csv(RAW + "customers.csv", dtype=str, keep_default_na=False)
+c = pd.read_csv(RAW / "customers.csv", dtype=str, keep_default_na=False)
 
 # (a) city: strip + title case
 before = c["city"].copy()
@@ -33,7 +35,7 @@ c["age"] = c["age"].fillna(c.groupby("city")["age"].transform("median"))
 c["signup_date"] = pd.to_datetime(c["signup_date"])
 
 # ======================= ORDERS =======================
-o = pd.read_csv(RAW + "orders.csv", dtype=str, keep_default_na=False)
+o = pd.read_csv(RAW / "orders.csv", dtype=str, keep_default_na=False)
 for col in ["quantity", "discount_pct"]:
     o[col] = pd.to_numeric(o[col])
 log["orders: raw rows"] = len(o)
@@ -72,15 +74,15 @@ o.loc[fill, "delivery_minutes"] = med[fill]
 o = o.drop(columns=["price_inr", "category"]).sort_values("order_ts").reset_index(drop=True)
 
 # ======================= STORE =======================
-c.to_csv(CLEAN + "customers.csv", index=False)
-products.to_csv(CLEAN + "products.csv", index=False)
-o.to_csv(CLEAN + "orders.csv", index=False, date_format="%Y-%m-%d %H:%M:%S")
+c.to_csv(CLEAN / "customers.csv", index=False)
+products.to_csv(CLEAN / "products.csv", index=False)
+o.to_csv(CLEAN / "orders.csv", index=False, date_format="%Y-%m-%d %H:%M:%S")
 
 o_db, c_db = o.copy(), c.copy()
 o_db["order_ts"] = o_db["order_ts"].dt.strftime("%Y-%m-%d %H:%M:%S")   # text in DB
 c_db["signup_date"] = c_db["signup_date"].dt.strftime("%Y-%m-%d")
-if os.path.exists(DB):
-    os.remove(DB)
+if DB.exists():
+    DB.unlink()
 with sqlite3.connect(DB) as con:
     c_db.to_sql("customers", con, index=False)
     products.to_sql("products", con, index=False)
@@ -91,4 +93,4 @@ for k, v in log.items():
     print(f"{k:60s} {v}")
 print("\nshapes:", "customers", c.shape, "| orders", o.shape, "| products", products.shape)
 print("status counts:", o["status"].value_counts().to_dict())
-print("saved:", CLEAN + "*.csv", "and", DB)
+print("saved:", CLEAN / "*.csv", "and", DB)

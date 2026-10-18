@@ -1,9 +1,11 @@
 """A6 - pandas cross-check of Q2 + exploratory analysis of completed order_amount.
-Run from repo root:  python a5_pandas.py"""
+Run: python PartA/src/a5_pandas.py"""
+from pathlib import Path
 import sqlite3
 import pandas as pd
 
-con = sqlite3.connect("data/instamart.db")
+ROOT = Path(__file__).resolve().parents[2]
+con = sqlite3.connect(ROOT / "data/instamart.db")
 df = pd.read_sql_query("""SELECT o.*, c.city, p.category
                           FROM orders o
                           JOIN customers c ON o.customer_id = c.customer_id

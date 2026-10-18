@@ -1,13 +1,15 @@
 """A5 - Run the 7 queries in sql/queries.sql against data/instamart.db and check the reference results.
-Run from repo root:  python a4_sql.py"""
+Run: python PartA/src/a4_sql.py"""
+from pathlib import Path
 import re, sqlite3
 import pandas as pd
 
-text = open("sql/queries.sql").read()
+ROOT = Path(__file__).resolve().parents[2]
+text = (ROOT / "sql/queries.sql").read_text(encoding="utf-8")
 parts = re.split(r"^-- (Q\d):.*$", text, flags=re.M)        # ['', 'Q1', sql, 'Q2', sql, ...]
 queries = {parts[i]: parts[i + 1].strip() for i in range(1, len(parts), 2)}
 
-con = sqlite3.connect("data/instamart.db")
+con = sqlite3.connect(ROOT / "data/instamart.db")
 res = {q: pd.read_sql_query(sql, con) for q, sql in queries.items()}
 con.close()
 pd.set_option("display.width", 140)
