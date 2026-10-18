@@ -1,8 +1,12 @@
 .env
-.venv/
 venv/
+.venv/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
 .DS_Store
+# submission is text-only: never commit PDFs/images
+*.pdf
+*.png
+*.jpg
 docs/*
