@@ -1,13 +1,22 @@
 """D1-D4 - Policy RAG: chunking, TF-IDF retrieval, grounded answer(), evaluation (overlap 10 and overlap 0).
 Also imported by the refund agent (d_agent.py) for search_policy.
 Run from repo root:  python d_rag.py"""
-import glob, os
+import glob, os, sys
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+
+# Resolve paths relative to this script's location so the data/ directory and
+# the repo-root mock_llm module are found regardless of the current working directory.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(_REPO_ROOT, "data")
+OUTPUTS_DIR = os.path.join(_REPO_ROOT, "outputs")
+sys.path.insert(0, _REPO_ROOT)
+pd.set_option("display.width", 140)
+
 import mock_llm
 
-POLICY_DIR = os.path.join("data", "policies")
+POLICY_DIR = os.path.join(DATA_DIR, "policies")
 SYSTEM_PROMPT = ("You are a POLICY ASSISTANT for Instamart support. Answer the QUESTION using only the supplied CONTEXT. "
                  "If the context does not contain the answer, say that you could not find the information.")
 
@@ -67,7 +76,7 @@ def answer(question, retriever=None, k=3):
 
 # ---------------- D4. evaluation ----------------
 def evaluate(retriever, label):
-    ev = pd.read_csv("data/raw/policy_eval.csv", keep_default_na=False)
+    ev = pd.read_csv(os.path.join(DATA_DIR, "raw", "policy_eval.csv"), keep_default_na=False)
     rows = []
     for _, r in ev.iterrows():
         text, sources = answer(r["question"], retriever)
