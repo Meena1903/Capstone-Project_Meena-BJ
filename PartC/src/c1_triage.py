@@ -1,7 +1,18 @@
 """C1-C7 - Support-ticket triage with guardrails, redaction, retries, validation, budget and routing.
 Run AFTER b1_segments.py, from repo root:  python c1_triage.py"""
-import json, os, random, re, time
+import json, os, random, re, sys, time
 import pandas as pd
+
+# Resolve paths relative to this script's location so the data/ and outputs/
+# directories, and the repo-root mock_llm module, are found regardless of the
+# current working directory.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATA_DIR = os.path.join(_REPO_ROOT, "data", "raw")
+OUTPUTS_DIR = os.path.join(_REPO_ROOT, "outputs")
+sys.path.insert(0, _REPO_ROOT)
+os.makedirs(OUTPUTS_DIR, exist_ok=True)
+pd.set_option("display.width", 140)
+
 import mock_llm
 from mock_llm import TransientLLMError, est_tokens
 
@@ -13,8 +24,6 @@ PATTERNS = [("email", re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+"), "[EMAIL]"),      #
             ("phone", re.compile(r"\b[6-9]\d{9}\b"), "[PHONE]"),
             ("order_id", re.compile(r"ORD-\d{6}"), "[ORDER_ID]")]
 random.seed(42)
-os.makedirs("outputs", exist_ok=True)
-pd.set_option("display.width", 140)
 
 # ---------------- C3. the two prompts ----------------
 ZERO_SHOT = ('You CLASSIFY customer support tickets into exactly one category: billing, delivery, technical or fraud. '
@@ -32,8 +41,8 @@ assert "EXAMPLES:" not in ZERO_SHOT and "EXAMPLES:" in FEW_SHOT
 print(f"Prompt length (est. tokens): zero-shot {est_tokens(ZERO_SHOT)}, few-shot {est_tokens(FEW_SHOT)}")
 
 # ---------------- data ----------------
-tickets = pd.read_csv("data/raw/tickets.csv", keep_default_na=False)
-seg = pd.read_csv("outputs/customer_segments.csv").set_index("customer_id")
+tickets = pd.read_csv(os.path.join(DATA_DIR, "tickets.csv"), keep_default_na=False)
+seg = pd.read_csv(os.path.join(OUTPUTS_DIR, "customer_segments.csv")).set_index("customer_id")
 
 # ---------------- C2. redaction ----------------
 def redact(text):
@@ -179,12 +188,12 @@ n_ex = int((demo_df.status == "budget_exhausted").sum())
 print(f"budget_exhausted tickets: {n_ex} (must be >= 1)")
 assert n_ex >= 1
 COLS = ["ticket_id", "customer_id", "status", "category", "segment_name", "priority", "route", "tokens_used"]
-demo_df[COLS].to_csv("outputs/triage_budget_demo.csv", index=False)
+demo_df[COLS].to_csv(os.path.join(OUTPUTS_DIR, "triage_budget_demo.csv"), index=False)
 
 # ---------------- C7b. final results ----------------
 final_df, final_stats = run_pipeline("final", FEW_SHOT, token_budget=100000)
 summarise("FINAL (few-shot, TOKEN_BUDGET=100000)", final_df, final_stats)
-final_df[COLS].to_csv("outputs/triage_results.csv", index=False)
+final_df[COLS].to_csv(os.path.join(OUTPUTS_DIR, "triage_results.csv"), index=False)
 print("\nFinal routing:")
 print(final_df.groupby(["route", "priority"]).size().to_string())
 print("rows in triage_results.csv:", len(final_df), "(must be 164)")
@@ -192,7 +201,7 @@ validated = final_df.status.isin(["classified_json", "classified_keyword"]).sum(
 print(f"rule-validated (classified_json + classified_keyword): {validated} | sent to humans: {int((final_df.route == 'human_review').sum())}")
 print(final_df[final_df.route == "human_review"].status.value_counts().to_dict())
 
-with open("outputs/retry_log.txt", "w") as f:
+with open(os.path.join(OUTPUTS_DIR, "retry_log.txt"), "w") as f:
     for label, tid, attempt, wait in all_retry_lines:
         f.write(f"{label}\tticket={tid}\tretry={attempt}\twait={wait:.4f}s\n")
 print(f"\nretry log written to outputs/retry_log.txt ({len(all_retry_lines)} lines across all runs)")
