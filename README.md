@@ -22,13 +22,11 @@ Run from the repository root (Python 3.11+).
 9. `python a3_validate.py`   (prints ALL CHECKPOINTS PASSED)
 10. `python a4_sql.py`   (runs `sql/queries.sql`)
 11. `python a5_pandas.py`   (pandas cross-check and exploratory analysis)
-
 12. `python b1_segments.py`   (Part B: RFM, K-means, segments, PCA)
 13. `python b2_lapse.py`   (Part B: lapse model, balance experiment, joblib, retention list)
-
 14. `python c1_triage.py`   (Part C: guardrails, redaction, retries, validation, budget, routing)
-
-<!-- Part D commands are added here as they are built -->
+15. `python d_rag.py`   (Part D: chunking, retrieval, evaluation with overlap 10 and 0)
+16. `python d_agent.py`   (Part D: tools, ReAct agent, stop limits, crash and resume)
 
 ## Part A
 
@@ -307,7 +305,103 @@ Zero-shot confusion table (rows = true category, columns = predicted):
 **Which outputs were rule-validated and which went to humans.** 147 of 164 tickets (89.6%) were accepted by the validation rules (135 classified_json and 12 classified_keyword) and routed automatically; 17 tickets (10.4%) went to human review: 9 because the model's answer failed validation, 4 because the ticket was empty and 4 because it was too long to send.
 
 ## Part D
-<!-- to be completed -->
+
+### D1. Chunking
+Each of the five policy files is split into chunks of 40 words with an overlap of 10 (first chunk words 0-39, the next starts 30 words later; the loop stops after the first chunk whose end reaches or passes the last word). The source file name is stored with every chunk.
+
+| File | Chunks |
+|---|---|
+| refund_policy.txt | 4 |
+| delivery_policy.txt | 3 |
+| escalation_policy.txt | 3 |
+| payment_policy.txt | 3 |
+| privacy_policy.txt | 2 |
+| **Total** | **15** |
+
+### D2. Vectorise and retrieve
+`TfidfVectorizer()` is fitted on the chunk texts only; a query is transformed with the same fitted vectorizer and chunks are ranked by `cosine_similarity`. `retrieve(query, k=3)` returns dictionaries with `source`, `score`, `text`. For the query `refund policy late delivery` the top three chunks all come from `refund_policy.txt` (scores 0.272, 0.251, 0.245).
+
+TF (term frequency) measures how often a word appears in a chunk, so it rewards words that are prominent in that chunk; IDF (inverse document frequency) measures how rare the word is across all chunks, so it down-weights words that appear everywhere. A limitation is that TF-IDF matches exact words only: "money back" and "refund" mean the same but share no words, so a question phrased differently from the policy text can miss the right chunk.
+
+### D3. Augment and answer
+`answer(question)` retrieves three chunks and sends two messages to `mock_llm.chat`: a system message containing POLICY ASSISTANT that tells the model to answer only from the supplied context and to say it could not find the information otherwise, and a user message of the form `CONTEXT:`, then the three chunks each prefixed with `[<source file name>]` on its own line, then `QUESTION:` and the question. It returns the model's text and the sources used.
+
+### D4. Retrieval and grounding evaluation (`data/raw/policy_eval.csv`: 12 answerable, 2 unanswerable)
+| Check | Overlap 10 | Overlap 0 |
+|---|---|---|
+| Answerable: expected_doc among top 3 sources | 12/12 | 12/12 |
+| Answerable: answer contains expected_fact (case-sensitive) | 12/12 | **10/12** |
+| Unanswerable: answer begins "I could not find" | 2/2 | 2/2 |
+| Number of chunks | 15 | 13 |
+
+With overlap 0 two questions break. "What delivery time makes a completed order eligible for a full refund?" fails because one chunk ends "delivered in more than 45 minutes, the customer" and the next starts "receives a full refund of the order amount", so the sentence is cut and the answer is only the fragment without "more than 45 minutes". "How soon is money returned when a payment fails but is deducted?" fails because a chunk ends "the amount is returned automatically" while "within 48 hours" starts the next chunk. The 10-word overlap repeats the end of one chunk at the start of the next, which keeps such sentences whole in at least one chunk.
+
+### D5. Tools
+Five tools with a name, a one-sentence description and a JSON-style parameter specification are kept in `TOOLS_SPEC`; `TOOL_MAP` maps each tool name to its Python function. The model asks for a tool by name with an arguments dictionary; the code looks the name up in `TOOL_MAP` and calls the function with those arguments.
+
+| Tool | What it does |
+|---|---|
+| `get_order(order_id)` | Reads `data/instamart.db`; returns order_id, status, order_amount, delivery_minutes, or `{"error": "order not found"}` |
+| `search_policy(query)` | Returns the `retrieve` output under the key `results` |
+| `calculate_refund(order_amount, delivery_minutes)` | More than 45 minutes: 100% of order_amount; 45 minutes or less: 0 |
+| `issue_refund(order_id, refund_inr)` | Appends a JSON line (timestamp, tool, run id, order id, amount) to `outputs/refund_ledger.jsonl`; refuses amounts above INR 1000 |
+| `escalate_to_human(order_id, refund_inr)` | Appends a JSON line to the ledger for a human lead |
+
+Refund rules implemented: only completed orders can be refunded; delivered in more than 45 minutes is refunded in full; 45 minutes or less pays 0; a refund above INR 1000 is escalated, never issued automatically. All requests are treated as raised inside the 7-day window.
+
+### D6. ReAct loop (`run_agent`, defaults: 6 model calls, 6000 tokens, 10 seconds)
+Messages start with a system message containing AGENT and the user message. Each iteration calls `chat`; a reply without tool calls is the final answer (status = the word before the colon); otherwise an assistant message with `tool_calls` is appended, the tool is executed, and a tool message with the JSON observation is appended. The seven scenarios in `data/raw/agent_scenarios.csv` were run and one JSON line per run was appended to `outputs/agent_runs.jsonl`.
+
+| Scenario | Status | Refund (INR) | Model calls | Tokens used |
+|---|---|---|---|---|
+| S1 | REFUND | 128.25 | 5 | 1,012 |
+| S2 | REFUND | 135.00 | 5 | 1,012 |
+| S3 | ESCALATE | 1,999.00 | 5 | 999 |
+| S4 | DENIED | 0 | 4 | 697 |
+| S5 | DENIED | 0 | 3 | 406 |
+| S6 | NOT_FOUND | 0 | 2 | 118 |
+| S7 | FALLBACK_MAX_ITERATIONS | 0 | 6 | 3,138 |
+
+Every refund amount equals `expected_refund_inr` within 0.01 and S1 takes 5 model calls. S7 (the looping scenario) uses all six model calls and 3,138 estimated tokens, so the default 6000-token limit does not stop it early.
+
+### D7. Stopping safely
+Three limits, each ending in a fallback that returns the steps completed so far and a short human-handoff summary in `final_answer`: (a) after `max_iterations` model calls without a final answer: `FALLBACK_MAX_ITERATIONS`; (b) after each model call `usage.total_tokens` is added to `tokens_used` and if it exceeds `token_limit` the run stops at once without executing the tool just requested: `FALLBACK_TOKEN_LIMIT`; (c) at the top of each iteration, if `time.monotonic()` shows `time_limit_seconds` or more elapsed: `FALLBACK_TIMEOUT`.
+
+| Demonstration | Setting | Status | Detail |
+|---|---|---|---|
+| S7 | defaults | FALLBACK_MAX_ITERATIONS | 6 model calls, 3,138 tokens |
+| S1 | `token_limit=200` | FALLBACK_TOKEN_LIMIT | stopped after 3 model calls at 423 tokens; steps done: get_order, search_policy; the requested calculate_refund was not executed |
+| S1 | `time_limit_seconds=0` | FALLBACK_TIMEOUT | stopped before the first model call (0 calls, no steps) |
+
+### D8. Resumable runs
+After every tool observation a checkpoint `state/<run_id>.json` is written (run id, scenario id, user message, the full message list, tokens_used, llm_calls, step number, tools executed so far, steps). `resume_agent(run_id)` loads it and continues the same loop. Demonstration with S1: a simulated crash was raised right after the second tool execution (after its checkpoint was saved), then `resume_agent` was called.
+
+| Part of the run | Tools executed (in order) |
+|---|---|
+| Before the crash | get_order, search_policy |
+| After the resume | calculate_refund, issue_refund |
+| **Across both** | **get_order, search_policy, calculate_refund, issue_refund** (4 executions, none repeated) |
+
+Final status REFUND with INR 128.25, 5 model calls in total. The ledger therefore shows order ORD-100048 twice: once for the normal S1 run (`S1-main`) and once for the crash demonstration (`S1-crash-demo`); each ledger line carries its run id. The three demonstration runs are logged in `outputs/agent_demos.jsonl`, so `outputs/agent_runs.jsonl` holds exactly one line per scenario (7).
+
+### D9. ReAct versus plan-and-execute
+ReAct called the model once per step plus a final reply: 5 calls for S1, 3 for S5, 2 for S6, and about 1,000 tokens for S1, because every call re-sends the growing history, including the three policy passages. A plan-and-execute design would ask once for the whole step list and run it, needing roughly 2 calls and fewer tokens for a clean case like S1. Its weakness is the unexpected observation: the plan is written before the order is known. For S6 (NOT_FOUND) or S5 (cancelled order), ReAct stops after 2 or 3 calls with the right answer, whereas a fixed plan would go on to calculate and issue a refund unless code checks every observation and a further model call replans. I would choose ReAct for this refund workflow because every branch (missing order, cancelled order, on-time delivery, amount above INR 1000) depends on what the previous tool returned, and money moves only after those checks. The extra cost is small (at most 5 calls and about 1,000 tokens per request) and is capped by the call, token and time limits and by checkpoints.
+
 
 ## Limitations and Next Steps
-<!-- to be completed -->
+
+**Limitations**
+- **Synthetic data and a mock model.** All data is synthetic and every model call uses the offline `mock_llm.py`, whose behaviour is keyword rules. The few-shot accuracy of 100% and the agent's tidy tool sequences are properties of the mock; a real model would make more mistakes and would gain less from few-shot examples.
+- **Retention list is illustrative.** The Premium flag comes from the whole-window RFM of Part B, which includes the September window that defines the lapse label, so it is a post-hoc whole-window label and the retention list is illustrative, not a leakage-free evaluation (the model's own features use only orders before 2025-09-01).
+- **Lapse model is modest.** Test F1 is about 0.64 on only 232 test rows with a single split; Random Forest and Logistic Regression are practically tied on the test set, the choice rests on cross-validated F1, and no decision threshold or cost-sensitive tuning was done.
+- **Segments.** K-means uses three RFM features at one snapshot (2025-10-01); cluster numbers carry no order and the business names are assigned by rule from each cluster's profile.
+- **Cleaning choices.** Median imputation (age by city, delivery time by category) and recomputing missing amounts from list price are documented assumptions that can bias results.
+- **Ticket triage.** Retries cover only transient errors. 5 of the 39 fraud tickets are among the 9 `flagged_invalid_output` tickets and go to `human_review` at NORMAL priority, so a fraud report can wait in a normal queue. The redaction covers only emails, 10-digit phone numbers and order ids (not names or addresses).
+- **Policy assistant and agent.** TF-IDF matches exact words only and works on just 15 small chunks. The agent runs one tool per step, the 7-day refund window is assumed, the ledger and checkpoints are local files without locking, and the crash demonstration deliberately writes a second ledger entry for the same order.
+
+**Next steps**
+- Replace the mock with a real model behind the same guardrails (redaction, retries, validation, budget) and re-measure accuracy and cost.
+- Route `flagged_invalid_output` tickets at HIGH priority until a human has checked them for fraud.
+- Tune the lapse threshold on business cost, validate with time-based splits, and rebuild the retention list from a Premium flag computed only from pre-cutoff data.
+- Add semantic retrieval (embeddings) so differently worded questions still find the right policy chunk.
+- Make the agent idempotent (an order id may be refunded only once) and add monitoring on fallback rates.
