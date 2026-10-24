@@ -1,0 +1,115 @@
+"""D1-D4 - Policy RAG: chunking, TF-IDF retrieval, grounded answer(), evaluation (overlap 10 and overlap 0).
+Also imported by the refund agent (d_agent.py) for search_policy.
+Run from repo root:  python d_rag.py"""
+import glob, os
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import mock_llm
+
+POLICY_DIR = os.path.join("data", "policies")
+SYSTEM_PROMPT = ("You are a POLICY ASSISTANT for Instamart support. Answer the QUESTION using only the supplied CONTEXT. "
+                 "If the context does not contain the answer, say that you could not find the information.")
+
+
+# ---------------- D1. chunking ----------------
+def chunk_words(text, size=40, overlap=10):
+    words = text.split()
+    step, chunks, start = size - overlap, [], 0
+    while True:
+        chunks.append(" ".join(words[start:start + size]))
+        if start + size >= len(words):          # this chunk reaches or passes the last word
+            break
+        start += step
+    return chunks
+
+
+def load_chunks(size=40, overlap=10):
+    out = []
+    for path in sorted(glob.glob(os.path.join(POLICY_DIR, "*.txt"))):
+        name = os.path.basename(path)
+        for c in chunk_words(open(path, encoding="utf-8").read(), size, overlap):
+            out.append({"source": name, "text": c})
+    return out
+
+
+# ---------------- D2. TF-IDF retrieval ----------------
+class Retriever:
+    def __init__(self, size=40, overlap=10):
+        self.chunks = load_chunks(size, overlap)
+        self.vectorizer = TfidfVectorizer()
+        self.matrix = self.vectorizer.fit_transform([c["text"] for c in self.chunks])   # fit on chunk texts only
+
+    def retrieve(self, query, k=3):
+        q = self.vectorizer.transform([query])                                          # same fitted vectorizer
+        sims = cosine_similarity(q, self.matrix).ravel()
+        top = sims.argsort()[::-1][:k]
+        return [{"source": self.chunks[i]["source"], "score": float(sims[i]), "text": self.chunks[i]["text"]} for i in top]
+
+
+_default = None
+def retrieve(query, k=3):
+    global _default
+    if _default is None:
+        _default = Retriever()
+    return _default.retrieve(query, k)
+
+
+# ---------------- D3. augment and answer ----------------
+def answer(question, retriever=None, k=3):
+    hits = (retriever.retrieve(question, k) if retriever else retrieve(question, k))
+    context = "\n".join(f"[{h['source']}]\n{h['text']}" for h in hits)
+    messages = [{"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"CONTEXT:\n{context}\nQUESTION:\n{question}"}]
+    resp = mock_llm.chat(messages)
+    return resp.choices[0].message.content, [h["source"] for h in hits]
+
+
+# ---------------- D4. evaluation ----------------
+def evaluate(retriever, label):
+    ev = pd.read_csv("data/raw/policy_eval.csv", keep_default_na=False)
+    rows = []
+    for _, r in ev.iterrows():
+        text, sources = answer(r["question"], retriever)
+        if r["expected_doc"] == "NONE":
+            rows.append({"q": r["question"], "kind": "unanswerable", "doc_ok": None, "fact_ok": None,
+                         "fallback_ok": text.startswith("I could not find"), "answer": text})
+        else:
+            in_chunks = any(r["expected_fact"] in c["text"] for c in retriever.chunks)
+            rows.append({"q": r["question"], "kind": "answerable", "doc_ok": r["expected_doc"] in sources,
+                         "fact_ok": r["expected_fact"] in text, "fallback_ok": None,
+                         "fact_in_any_chunk": in_chunks, "answer": text})
+    df = pd.DataFrame(rows)
+    a, u = df[df.kind == "answerable"].copy(), df[df.kind == "unanswerable"].copy()
+    a[["doc_ok", "fact_ok", "fact_in_any_chunk"]] = a[["doc_ok", "fact_ok", "fact_in_any_chunk"]].astype(bool)
+    u["fallback_ok"] = u["fallback_ok"].astype(bool)
+    print(f"\n=== {label} ===")
+    print(pd.DataFrame({"check": ["answerable: expected_doc in top 3", "answerable: answer contains expected_fact",
+                                  "unanswerable: fallback 'I could not find'"],
+                        "result": [f"{int(a.doc_ok.sum())}/{len(a)}", f"{int(a.fact_ok.sum())}/{len(a)}",
+                                   f"{int(u.fallback_ok.sum())}/{len(u)}"]}).to_string(index=False))
+    broken = a[~(a.doc_ok & a.fact_ok)]
+    for _, b in broken.iterrows():
+        why = ("the expected fact is split across a chunk boundary (no single chunk contains it)"
+               if not b.fact_in_any_chunk else "the sentence that carries the fact is cut by a chunk boundary, so the answerer only sees a fragment of it")
+        print(f"  BREAKS: {b.q!r} -> doc_ok={b.doc_ok}, fact_ok={b.fact_ok}; reason: {why}")
+        print(f"          answer given: {b.answer!r}")
+    return df
+
+
+if __name__ == "__main__":
+    pd.set_option("display.width", 140)
+    r10 = Retriever(40, 10)
+    counts = pd.Series([c["source"] for c in r10.chunks]).value_counts().to_dict()
+    print("=== D1. Chunks (40 words, overlap 10) ===")
+    print("total:", len(r10.chunks), counts, "(ref 15: refund 4, delivery 3, escalation 3, payment 3, privacy 2)")
+    print("\n=== D2. retrieve('refund policy late delivery', k=3) ===")
+    for h in r10.retrieve("refund policy late delivery"):
+        print(f"  {h['source']:22s} score={h['score']:.3f}  {h['text'][:70]}...")
+    print("\n=== D3. Example answer ===")
+    t, s = answer("Who must approve a refund above INR 1000?", r10)
+    print("answer:", t, "| sources:", s)
+    evaluate(r10, "D4. Evaluation, overlap 10 (ref 12/12, 12/12, 2/2)")
+    r0 = Retriever(40, 0)
+    print("\nchunks with overlap 0:", len(r0.chunks))
+    evaluate(r0, "D4. Evaluation, overlap 0 (ref: at least one answerable question fails)")
