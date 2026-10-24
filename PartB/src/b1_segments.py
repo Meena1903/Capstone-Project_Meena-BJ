@@ -10,10 +10,16 @@ from sklearn.preprocessing import StandardScaler
 
 SNAPSHOT = pd.Timestamp("2025-10-01 00:00:00")
 FINAL_K = 4
-os.makedirs("outputs", exist_ok=True)
+
+# Resolve paths relative to this script's location so the data/ and outputs/
+# directories are found regardless of the current working directory.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATA_DIR = os.path.join(_REPO_ROOT, "data", "clean")
+OUTPUTS_DIR = os.path.join(_REPO_ROOT, "outputs")
+os.makedirs(OUTPUTS_DIR, exist_ok=True)
 pd.set_option("display.width", 140)
 
-orders = pd.read_csv("data/clean/orders.csv", parse_dates=["order_ts"])
+orders = pd.read_csv(os.path.join(DATA_DIR, "orders.csv"), parse_dates=["order_ts"])
 done = orders[orders["status"] == "completed"]
 
 # ---------------- B1. RFM table ----------------
@@ -83,5 +89,5 @@ out = rfm.copy()
 out["segment_name"] = out["segment_id"].map(names)
 out["is_premium"] = out["segment_id"] == premium_id
 out["monetary"] = out["monetary"].round(2)
-out.to_csv("outputs/customer_segments.csv", index=False)
+out.to_csv(os.path.join(OUTPUTS_DIR, "customer_segments.csv"), index=False)
 print("\nsaved outputs/customer_segments.csv:", out.shape, "| premium customers:", int(out["is_premium"].sum()))

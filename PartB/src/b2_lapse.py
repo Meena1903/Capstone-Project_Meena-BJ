@@ -15,12 +15,18 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 CUTOFF, WINDOW_END = pd.Timestamp("2025-09-01"), pd.Timestamp("2025-10-01")
-os.makedirs("outputs", exist_ok=True)
+
+# Resolve paths relative to this script's location so the data/ and outputs/
+# directories are found regardless of the current working directory.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATA_DIR = os.path.join(_REPO_ROOT, "data", "clean")
+OUTPUTS_DIR = os.path.join(_REPO_ROOT, "outputs")
+os.makedirs(OUTPUTS_DIR, exist_ok=True)
 pd.set_option("display.width", 140)
 
-orders = pd.read_csv("data/clean/orders.csv", parse_dates=["order_ts"])
-customers = pd.read_csv("data/clean/customers.csv", parse_dates=["signup_date"])
-products = pd.read_csv("data/clean/products.csv")
+orders = pd.read_csv(os.path.join(DATA_DIR, "orders.csv"), parse_dates=["order_ts"])
+customers = pd.read_csv(os.path.join(DATA_DIR, "customers.csv"), parse_dates=["signup_date"])
+products = pd.read_csv(os.path.join(DATA_DIR, "products.csv"))
 orders = orders.merge(products[["product_id", "category"]], on="product_id", how="left")
 
 # =============== B4. Cohort, label, features ===============
@@ -122,20 +128,20 @@ print("\nLogReg coefficients (positive = higher lapse probability):")
 for f in ["num__recency", "num__frequency", "num__cancel_rate"]:
     print(f"  {f:20s} {coef[f]:+.3f}  -> higher value makes lapse {'MORE' if coef[f] > 0 else 'LESS'} likely")
 
-joblib.dump(best_model, "outputs/lapse_model.joblib")
-reloaded = joblib.load("outputs/lapse_model.joblib")
+joblib.dump(best_model, os.path.join(OUTPUTS_DIR, "lapse_model.joblib"))
+reloaded = joblib.load(os.path.join(OUTPUTS_DIR, "lapse_model.joblib"))
 same = np.array_equal(best_model.predict(X_test), reloaded.predict(X_test)) and \
        np.allclose(best_model.predict_proba(X_test), reloaded.predict_proba(X_test))
 print("\n=== B8b. Persistence ===\nreloaded model reproduces test predictions exactly:", same)
 assert same
 
-seg = pd.read_csv("outputs/customer_segments.csv")[["customer_id", "is_premium"]]
+seg = pd.read_csv(os.path.join(OUTPUTS_DIR, "customer_segments.csv"))[["customer_id", "is_premium"]]
 res = pd.DataFrame({"customer_id": X_test.index,
                     "lapse_probability": best_model.predict_proba(X_test)[:, 1].round(4),
                     "actually_lapsed": y_test.values})
 res = res.merge(seg, on="customer_id", how="inner")
 prem = res[res["is_premium"]].sort_values("lapse_probability", ascending=False).head(10)
-prem[["customer_id", "lapse_probability", "actually_lapsed"]].to_csv("outputs/retention_list.csv", index=False)
+prem[["customer_id", "lapse_probability", "actually_lapsed"]].to_csv(os.path.join(OUTPUTS_DIR, "retention_list.csv"), index=False)
 print("\n=== B8c. Retention list (Premium customers in the test set) ===")
 print(prem[["customer_id", "lapse_probability", "actually_lapsed"]].to_string(index=False))
 print(f"Premium customers in test set: {int(res['is_premium'].sum())} | rows written: {len(prem)} | truly lapsed: {int(prem['actually_lapsed'].sum())}")
