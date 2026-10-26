@@ -6,7 +6,9 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 RAW, CLEAN, DB = ROOT / "data/raw", ROOT / "data/clean", ROOT / "data/instamart.db"
+SUBMISSION_CLEAN = ROOT / "PartA/clean"
 CLEAN.mkdir(parents=True, exist_ok=True)
+SUBMISSION_CLEAN.mkdir(parents=True, exist_ok=True)
 log = {}   # rows/values changed per rule -> copy into README
 
 products = pd.read_csv(RAW / "products.csv")
@@ -77,6 +79,11 @@ o = o.drop(columns=["price_inr", "category"]).sort_values("order_ts").reset_inde
 c.to_csv(CLEAN / "customers.csv", index=False)
 products.to_csv(CLEAN / "products.csv", index=False)
 o.to_csv(CLEAN / "orders.csv", index=False, date_format="%Y-%m-%d %H:%M:%S")
+# Keep the explicit Part A submission paths in sync with the canonical files
+# consumed by Parts B and D.
+c.to_csv(SUBMISSION_CLEAN / "customers.csv", index=False)
+products.to_csv(SUBMISSION_CLEAN / "products.csv", index=False)
+o.to_csv(SUBMISSION_CLEAN / "orders.csv", index=False, date_format="%Y-%m-%d %H:%M:%S")
 
 o_db, c_db = o.copy(), c.copy()
 o_db["order_ts"] = o_db["order_ts"].dt.strftime("%Y-%m-%d %H:%M:%S")   # text in DB

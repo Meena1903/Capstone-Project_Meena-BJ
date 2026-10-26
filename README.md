@@ -10,28 +10,52 @@ One repository, four connected Parts built on synthetic (fictional) Instamart da
 All language-model calls use the offline `mock_llm.py`. No API key or network is needed. `generate_data.py` and `mock_llm.py` are unmodified.
 
 ## Reproduce
-Run from the repository root (Python 3.11+).
+Run from the repository root with Python 3.11+ and internet access only for the initial package installation. `requirements.txt` is the frozen dependency list; all project runs after installation are offline.
+
 1. `python -m venv venv`
-2. `source venv/bin/activate`   (Windows: `venv\Scripts\activate`)
-3. `pip install pandas numpy scikit-learn joblib`
-4. `pip freeze > requirements.txt`
-5. `python generate_data.py`
-6. `python check_setup.py`   (prints SETUP OK)
-7. `python a1_audit.py`   (Part A audit)
-8. `python a2_clean.py`   (Part A cleaning, CSVs and database)
-9. `python a3_validate.py`   (prints ALL CHECKPOINTS PASSED)
-10. `python a4_sql.py`   (runs `sql/queries.sql`)
-11. `python a5_pandas.py`   (pandas cross-check and exploratory analysis)
-12. `python b1_segments.py`   (Part B: RFM, K-means, segments, PCA)
-13. `python b2_lapse.py`   (Part B: lapse model, balance experiment, joblib, retention list)
-14. `python c1_triage.py`   (Part C: guardrails, redaction, retries, validation, budget, routing)
-15. `python d_rag.py`   (Part D: chunking, retrieval, evaluation with overlap 10 and 0)
-16. `python d_agent.py`   (Part D: tools, ReAct agent, stop limits, crash and resume)
+2. `source venv/bin/activate` (Windows: `venv\Scripts\activate`)
+3. `python -m pip install -r requirements.txt`
+4. `python generate_data.py`
+5. `python PartA/src/a1_audit.py` (raw-data audit)
+6. `python PartA/src/a2_clean.py` (clean CSVs and SQLite database)
+7. `python PartA/src/a3_validate.py` (must print `ALL CHECKPOINTS PASSED`)
+8. `python PartA/src/a4_sql.py` (runs `sql/queries.sql`)
+9. `python PartA/src/a5_pandas.py` (pandas cross-check and exploratory analysis)
+10. `python PartB/src/b1_segments.py` (RFM, K-means, segments and PCA)
+11. `python PartB/src/b2_lapse.py` (lapse model, balance experiment, persistence and retention list)
+12. `python PartC/src/c1_triage.py` (guardrails, redaction, retries, validation, budget and routing)
+13. `python PartD/d_rag.py` (chunking, retrieval and evaluation with overlap 10 and 0)
+14. `python PartD/d_agent.py` (tools, ReAct agent, safe stops, crash and resume)
+
+Part A writes the canonical clean tables to `data/clean/` for Parts B and D and mirrors them to the required `PartA/clean/` submission paths. Generated Part B–D deliverables are written under `outputs/`; Part D checkpoints are written under `state/`.
 
 ## Part A
 
 ### A1. Audit of the raw data
-Shapes: orders 13,084 x 9; customers 1,200 x 5; products 40 x 4. Missing values in a standard pandas read: orders `order_amount` 53 (0.41%), `delivery_minutes` 2,541 (19.42%); customers `age` 61 (5.08%), `gender` 30 (2.50%); no other column has missing values. Note: pandas reads the text `N/A` as missing, so the 53 are only the `N/A` entries; the other 67 bad amounts are the text `error`. The figures below are therefore taken from a text read (`dtype=str, keep_default_na=False`).
+Shapes: orders 13,084 x 9; customers 1,200 x 5; products 40 x 4. The audit below reports each column's pandas dtype and missing count and percentage (standard `read_csv` behavior).
+
+| Table (shape) | Column | dtype | Missing | Missing % |
+|---|---|---:|---:|---:|
+| orders (13,084 x 9) | order_id | str | 0 | 0.00 |
+| orders | customer_id | str | 0 | 0.00 |
+| orders | product_id | str | 0 | 0.00 |
+| orders | quantity | int64 | 0 | 0.00 |
+| orders | order_ts | str | 0 | 0.00 |
+| orders | status | str | 0 | 0.00 |
+| orders | discount_pct | int64 | 0 | 0.00 |
+| orders | order_amount | str | 53 | 0.41 |
+| orders | delivery_minutes | float64 | 2,541 | 19.42 |
+| customers (1,200 x 5) | customer_id | str | 0 | 0.00 |
+| customers | city | str | 0 | 0.00 |
+| customers | signup_date | str | 0 | 0.00 |
+| customers | age | float64 | 61 | 5.08 |
+| customers | gender | str | 30 | 2.50 |
+| products (40 x 4) | product_id | str | 0 | 0.00 |
+| products | product_name | str | 0 | 0.00 |
+| products | category | str | 0 | 0.00 |
+| products | price_inr | int64 | 0 | 0.00 |
+
+Pandas treats the literal `N/A` as missing, so the standard-read count for `order_amount` is 53; a raw text read (`dtype=str, keep_default_na=False`) shows 120 non-numeric values, including 67 `error` values.
 
 | Audit figure | Found |
 |---|---|
