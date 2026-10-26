@@ -10,3 +10,10 @@ __pycache__/
 *.png
 *.jpg
 docs/*
+outputs/customer_rfm.csv
+outputs/kmeans_scores.csv
+outputs/lapse_features.csv
+outputs/lapse_split.joblib
+outputs/lapse_tuned_models.joblib
+outputs/redacted_tickets.csv
+outputs/.triage_retry_part.log

@@ -16,22 +16,41 @@ Run from the repository root with Python 3.11+ and internet access only for the 
 2. `source venv/bin/activate` (Windows: `venv\Scripts\activate`)
 3. `python -m pip install -r requirements.txt`
 4. `python generate_data.py`
-5. `python PartA/src/a1_audit.py` (raw-data audit)
-6. `python PartA/src/a2_clean.py` (clean CSVs and SQLite database)
+5. `python PartA/src/a1_audit.py`
+6. `python PartA/src/a2_clean.py`
 7. `python PartA/src/a3_validate.py` (must print `ALL CHECKPOINTS PASSED`)
-8. `python PartA/src/a4_sql.py` (runs `sql/queries.sql`)
-9. `python PartA/src/a5_pandas.py` (pandas cross-check and exploratory analysis)
-10. `python PartB/src/b1_segments.py` (RFM, K-means, segments and PCA)
-11. `python PartB/src/b2_lapse.py` (lapse model, balance experiment, persistence and retention list)
-12. `python PartC/src/c1_triage.py` (guardrails, redaction, retries, validation, budget and routing)
-13. `python PartD/d_rag.py` (chunking, retrieval and evaluation with overlap 10 and 0)
-14. `python PartD/d_agent.py` (tools, ReAct agent, safe stops, crash and resume)
+8. `python PartA/src/a4_sql.py`
+9. `python PartA/src/a5_pandas.py`
+10. `python PartB/src/b1_rfm.py`
+11. `python PartB/src/b2_kmeans.py`
+12. `python PartB/src/b3_segments.py`
+13. `python PartB/src/b4_lapse_problem.py`
+14. `python PartB/src/b5_preprocess.py`
+15. `python PartB/src/b6_tune_evaluate.py`
+16. `python PartB/src/b7_balance_experiment.py`
+17. `python PartB/src/b8_interpret_persist.py`
+18. `python PartC/src/c1_input_guardrails.py`
+19. `python PartC/src/c2_redaction.py`
+20. `python PartC/src/c3_prompts.py`
+21. `python PartC/src/c4_resilient_calls.py`
+22. `python PartC/src/c5_output_validation.py`
+23. `python PartC/src/c6_prompt_comparison.py`
+24. `python PartC/src/c7_budget_and_routing.py`
+25. `python PartD/d1_chunking.py`
+26. `python PartD/d2_retrieval.py`
+27. `python PartD/d3_answer.py`
+28. `python PartD/d4_evaluation.py`
+29. `python PartD/d5_tools.py`
+30. `python PartD/d6_react_scenarios.py`
+31. `python PartD/d7_safe_stops.py`
+32. `python PartD/d8_resume_run.py`
+33. `python PartD/d9_react_vs_plan.py`
 
-Part A writes the canonical clean tables to `data/clean/` for Parts B and D and mirrors them to the required `PartA/clean/` submission paths. Generated Part B–D deliverables are written under `outputs/`; Part D checkpoints are written under `state/`.
+Run the numbered scripts in order; each README subsection has a corresponding executable script. Shared helpers (`PartB/src/common.py`, `PartC/src/common.py`, `PartD/d_rag.py`, and `PartD/d_agent.py`) hold code reused by those scripts. Part A writes the canonical clean tables to `data/clean/` for Parts B and D and mirrors them to the required `PartA/clean/` submission paths. Generated Part B–D deliverables are written under `outputs/`; Part D checkpoints are written under `state/`.
 
 ## Part A
 
-### A1. Audit of the raw data
+### A1. Audit of the raw data (`PartA/src/a1_audit.py`)
 Shapes: orders 13,084 x 9; customers 1,200 x 5; products 40 x 4. The audit below reports each column's pandas dtype and missing count and percentage (standard `read_csv` behavior).
 
 | Table (shape) | Column | dtype | Missing | Missing % |
@@ -72,7 +91,7 @@ Pandas treats the literal `N/A` as missing, so the standard-read count for `orde
 | Customers: distinct non-blank gender spellings | 10 |
 | Customers: blank gender | 30 |
 
-### A2. Cleaning rules and what each changed
+### A2. Cleaning rules and what each changed (`PartA/src/a2_clean.py`)
 **Customers**
 | Rule | Changed |
 |---|---|
@@ -99,10 +118,10 @@ Counts for rules 4 and 5a are lower than the audit (120 and 106) because rule 2 
 
 Result: 12,309 rows (one per order_id); 11,110 completed, 1,199 cancelled, 0 pending; 0 missing `order_amount`; completed revenue INR 2,998,668.80.
 
-### A3. Storage and validation
-`a2_clean.py` writes `data/clean/customers.csv`, `products.csv`, `orders.csv` and the SQLite database `data/instamart.db` with tables `customers`, `products`, `orders` (`order_ts` stored as text `YYYY-MM-DD HH:MM:SS`). `a3_validate.py` reads the database and checks 14 reference checkpoints (cities, genders, ages, row counts, status counts, missing values, revenue sum). It prints `ALL CHECKPOINTS PASSED`.
+### A3. Storage and validation (`PartA/src/a3_validate.py`)
+`a2_clean.py` writes `data/clean/customers.csv`, `products.csv`, `orders.csv` and mirrors them under `PartA/clean/`. `a3_validate.py` loads the clean tables into `data/instamart.db` with tables `customers`, `products`, `orders` (`order_ts` stored as text `YYYY-MM-DD HH:MM:SS`), checks 14 reference checkpoints (cities, genders, ages, row counts, status counts, missing values, revenue sum), and prints `ALL CHECKPOINTS PASSED`.
 
-### A4. SQL analysis (`sql/queries.sql`, run by `a4_sql.py`)
+### A4. SQL analysis (`PartA/src/a4_sql.py`, queries in `sql/queries.sql`)
 | Query | Concept | Result |
 |---|---|---|
 | Q1 | WHERE then HAVING | 30 customers |
@@ -115,7 +134,7 @@ Result: 12,309 rows (one per order_id); 11,110 completed, 1,199 cancelled, 0 pen
 
 Why ties make RANK differ from ROW_NUMBER: tied customers share the same RANK (1, 1, 3) while ROW_NUMBER always gives each row a unique number (1, 2, 3).
 
-### A5. pandas cross-check and exploratory analysis
+### A5. pandas cross-check and exploratory analysis (`PartA/src/a5_pandas.py`)
 The `pd.pivot_table(..., margins=True)` rebuild of Q2 has a grand total of INR 2,998,668.80, equal to the SQL total.
 
 | City | Sum (INR) | Mean (INR) | Count |
@@ -146,7 +165,7 @@ Correlation matrix (completed orders):
 
 No encoder, scaler or resampler saw any test row (preprocessing sits inside a scikit-learn `Pipeline`, and over-sampling draws only from training rows). No order dated 2025-09-01 or later entered the lapse features. The segment labels from B3 were not used as features.
 
-### B1. RFM table
+### B1. RFM table (`PartB/src/b1_rfm.py`)
 Snapshot 2025-10-01 00:00:00, completed orders only. 1,175 customers (those with at least one completed order).
 
 | Measure | Value |
@@ -155,7 +174,7 @@ Snapshot 2025-10-01 00:00:00, completed orders only. 1,175 customers (those with
 | Frequency: mean / max | 9.46 / 33 |
 | Monetary (INR): mean / max | 2,552.06 / 14,766.55 |
 
-### B2. K-means (RFM standardised with `StandardScaler`, `n_init=10`, `random_state=42`)
+### B2. K-means (`PartB/src/b2_kmeans.py`; RFM standardised with `StandardScaler`, `n_init=10`, `random_state=42`)
 | K | Inertia | Silhouette |
 |---|---|---|
 | 2 | 1820.8 | 0.465 |
@@ -170,7 +189,7 @@ Snapshot 2025-10-01 00:00:00, completed orders only. 1,175 customers (those with
 
 **Why K=8 inertia is lower than K=2 yet cannot pick K.** Adding clusters can only move centres closer to their points, so inertia always shrinks as K grows (it would reach 0 with one cluster per customer). The value alone therefore always favours the largest K; the elbow, the silhouette and business meaning must decide.
 
-### B3. Segments (K=4)
+### B3. Segments (`PartB/src/b3_segments.py`; K=4)
 Cluster numbers are only labels with no ordering; names below were assigned from the profile of each cluster, not from its number.
 
 | Segment id | Name | Size | Mean recency (days) | Mean frequency | Mean monetary (INR) | Premium | Recommended action |
@@ -182,7 +201,7 @@ Cluster numbers are only labels with no ordering; names below were assigned from
 
 Premium is the segment with the highest mean monetary value (138 customers). PCA on the scaled RFM matrix: explained variance ratio 0.634 and 0.218, total 0.852. `outputs/customer_segments.csv` has columns customer_id, recency, frequency, monetary, segment_id, segment_name, is_premium.
 
-### B4. Lapse problem
+### B4. Lapse problem (`PartB/src/b4_lapse_problem.py`)
 Cutoff 2025-09-01. Cohort: every customer with at least one completed order before the cutoff. Label `lapsed` = 1 if the customer has no completed order from 2025-09-01 through 2025-09-30.
 
 Features (built only from orders before the cutoff plus the clean customer table): recency (days from cutoff to last completed order), frequency, monetary, average discount_pct, cancellation rate (cancelled / all orders with a final status), average delivery_minutes of completed orders, favourite product category, city, age, gender, tenure in days (cutoff minus signup_date).
@@ -194,10 +213,10 @@ Features (built only from orders before the cutoff plus the clean customer table
 | Split | `train_test_split(test_size=0.2, stratify=y, random_state=42)`: 924 train / 232 test |
 | Baseline (always "not lapsed") on test | accuracy 0.616, lapsed-class F1 0.0 |
 
-### B5. Preprocessing without leakage
+### B5. Preprocessing without leakage (`PartB/src/b5_preprocess.py`)
 `ColumnTransformer` with `StandardScaler` on the 8 numeric features and `OneHotEncoder(drop="first")` on city, gender and favourite category, inside a `Pipeline` so both are fitted on training rows only. The scaler's learned mean of frequency is 8.115 against a full-cohort mean of 8.029: they differ because the scaler saw only the 924 training rows. No feature column has a missing value (checked in code: 0).
 
-### B6. Tuning and test evaluation
+### B6. Tuning and test evaluation (`PartB/src/b6_tune_evaluate.py`)
 | Model | Grid (cv=5, scoring f1) | Best parameters | Best CV F1 |
 |---|---|---|---|
 | Logistic Regression (`max_iter=1000`) | C in {0.01, 0.1, 1, 10, 100} | C = 100 | 0.6506 |
@@ -214,7 +233,7 @@ Both beat the baseline (F1 0.0) and the required 0.55. The reference logistic re
 
 **Model choice: Random Forest.** It was selected on cross-validated F1 (0.687 against 0.651), which keeps the test set out of the decision; on the test set the two models are practically tied (F1 0.640 against 0.648). Missing a customer who is about to lapse (a false negative) loses all of that customer's future revenue, while wrongly targeting a loyal customer (a false positive) costs only the price of a message or a small offer, so recall matters more than precision for the retention team. Our forest still misses 32 of 89 lapsing customers, so in practice the team should lower the decision threshold or use the balanced model below if they want to catch more of them.
 
-### B7. Class-balance experiment
+### B7. Class-balance experiment (`PartB/src/b7_balance_experiment.py`)
 Training set over-sampled with duplicates of lapsed rows (drawn with replacement, `random_state=42`) from 570 / 354 to 570 / 570; the best logistic regression was refit and scored on the unchanged test set.
 
 | Logistic Regression | Precision | Recall | F1 | Confusion matrix |
@@ -224,7 +243,7 @@ Training set over-sampled with duplicates of lapsed rows (drawn with replacement
 
 Recall moved most (+0.202); precision did not rise, it fell (-0.055). For the retention team this means the balanced model finds 76 of 89 lapsing customers instead of 58, at the price of 53 false alarms instead of 32, which is a good trade when the retention offer is cheap.
 
-### B8. Interpretation, persistence and use
+### B8. Interpretation, persistence and use (`PartB/src/b8_interpret_persist.py`)
 Top-5 Random Forest feature importances:
 
 | Feature | Importance | Business reading |
@@ -249,9 +268,9 @@ The selected model (Random Forest pipeline) was saved with `joblib.dump` to `out
 
 ## Part C
 
-All 164 tickets were processed in file order by `c1_triage.py`. Every model call goes through `mock_llm.py`; `mock_llm.reset()` is called immediately before each full run. Retry waits are logged in `outputs/retry_log.txt`.
+All 164 tickets were processed in file order by the C6/C7 runners. Every model call goes through `mock_llm.py`; `mock_llm.reset()` is called immediately before each full run. Retry waits are logged in `outputs/retry_log.txt`.
 
-### C1. Input guardrails
+### C1. Input guardrails (`PartC/src/c1_input_guardrails.py`)
 | Rule | Status | Tickets | Model calls |
 |---|---|---|---|
 | Text empty or only whitespace | `skipped_empty` | 4 | 0 |
@@ -259,7 +278,7 @@ All 164 tickets were processed in file order by `c1_triage.py`. Every model call
 
 An assertion in the code checks that no empty or long ticket id was ever sent to the model; 156 tickets were eligible.
 
-### C2. Redaction (applied in this order before any prompt)
+### C2. Redaction (`PartC/src/c2_redaction.py`; applied in this order before any prompt)
 | Order | Type | Regular expression | Placeholder | Substitutions |
 |---|---|---|---|---|
 | 1 | Email | `[\w.+-]+@[\w-]+\.[\w.]+` | `[EMAIL]` | 55 |
@@ -269,10 +288,10 @@ An assertion in the code checks that no empty or long ticket id was ever sent to
 
 Re-applying the three patterns to the redacted texts finds 0 matches. The user message sent to the model is exactly the redacted ticket text and nothing else; an assertion in the code verifies this and that no pattern matches the message before every call.
 
-### C3. Prompts
+### C3. Prompts (`PartC/src/c3_prompts.py`)
 Both system prompts contain the word CLASSIFY, list the four categories (billing, delivery, technical, fraud) and require a JSON-only reply of the form `{"category": "...", "reason": "..."}`. The zero-shot prompt (37 estimated tokens) has no `EXAMPLES:` line. The few-shot prompt (119 estimated tokens) has an `EXAMPLES:` line followed by four labelled examples (billing, delivery, technical and a fraud example).
 
-### C4. Resilient calls
+### C4. Resilient calls (`PartC/src/c4_resilient_calls.py`)
 Every model call goes through a retry function: at most 3 retries per ticket, wait before retry n = `0.05 x 2**n x random.uniform(0.9, 1.15)` seconds, one log line per retry (ticket id, retry number, wait).
 
 | Full run over the 156 eligible tickets | Result |
@@ -283,7 +302,7 @@ Every model call goes through a retry function: at most 3 retries per ticket, wa
 | Retry numbers seen | all retry 0 |
 | Waits | between 0.0453 s and 0.0562 s (allowed range for retry 0: 0.045 to 0.0575 s) |
 
-### C5. Output validation
+### C5. Output validation (`PartC/src/c5_output_validation.py`)
 The reply is parsed as JSON; a category in {billing, delivery, technical, fraud} gives `classified_json`. If the reply is not valid JSON, the lowercase words are extracted with `re.findall(r"[a-z]+", text.lower())` (so `billing-related` yields `billing` and `related`) and exactly one allowed category word gives `classified_keyword`. Anything else, including valid JSON with a category outside the list (the mock returns `shipping`), is `flagged_invalid_output` and goes to human review; the pipeline never guesses.
 
 | Status | Tickets (one full run) |
@@ -295,7 +314,7 @@ The reply is parsed as JSON; a category in {billing, delivery, technical, fraud}
 | flagged_long | 4 |
 | **Total** | **164** |
 
-### C6. Zero-shot versus few-shot (no token budget)
+### C6. Zero-shot versus few-shot (`PartC/src/c6_prompt_comparison.py`; no token budget)
 | Run | Tickets classified | Accuracy vs true_category | Total tokens | Tokens per classified ticket |
 |---|---|---|---|---|
 | Zero-shot | 147 | 85.7% (126 of 147) | 10,180 | 69.3 |
@@ -314,7 +333,7 @@ Zero-shot confusion table (rows = true category, columns = predicted):
 
 **When are the few-shot tokens worth paying for?** The few-shot prompt costs 156.3 tokens per classified ticket against 69.3 for zero-shot, about 2.3 times more (22,972 against 10,180 tokens in total), but it lifts accuracy from 85.7% to 100% and removes all 21 errors (11 fraud tickets sent to billing and 10 technical tickets sent to billing). That is worth paying when a wrong route is costly, as when a fraud ticket lands in the billing queue instead of reaching the security team within its 2-hour target. It is not worth paying when the cheap prompt is already accurate enough or the cost of a misrouted ticket is low, because the extra tokens are charged on every ticket.
 
-### C7. Token budget and routing
+### C7. Token budget and routing (`PartC/src/c7_budget_and_routing.py`)
 **(a) Budget demo.** Before each model call, if the running total of `usage.total_tokens` is already at or above `TOKEN_BUDGET`, no call is made and the ticket gets `budget_exhausted` (human review). Zero-shot run with `TOKEN_BUDGET` = 6000 (zero-shot prompt about 37 estimated tokens): 80 classified_json, 7 classified_keyword, 5 flagged_invalid_output, **64 budget_exhausted**, 4 skipped_empty, 4 flagged_long; 6,010 tokens used (the budget is checked before each call, so the last call can cross it); 11 transient errors, all recovered. Saved as `outputs/triage_budget_demo.csv`.
 
 **(b) Final results.** `outputs/triage_results.csv` (164 rows; columns ticket_id, customer_id, status, category, segment_name, priority, route, tokens_used) comes from a few-shot run with `TOKEN_BUDGET` = 100000 (22,972 tokens used, nothing exhausted). Routing reads `outputs/customer_segments.csv` from Part B; a customer without a row there is treated as not premium.
@@ -330,7 +349,7 @@ Zero-shot confusion table (rows = true category, columns = predicted):
 
 ## Part D
 
-### D1. Chunking
+### D1. Chunking (`PartD/d1_chunking.py`)
 Each of the five policy files is split into chunks of 40 words with an overlap of 10 (first chunk words 0-39, the next starts 30 words later; the loop stops after the first chunk whose end reaches or passes the last word). The source file name is stored with every chunk.
 
 | File | Chunks |
@@ -342,15 +361,15 @@ Each of the five policy files is split into chunks of 40 words with an overlap o
 | privacy_policy.txt | 2 |
 | **Total** | **15** |
 
-### D2. Vectorise and retrieve
+### D2. Vectorise and retrieve (`PartD/d2_retrieval.py`)
 `TfidfVectorizer()` is fitted on the chunk texts only; a query is transformed with the same fitted vectorizer and chunks are ranked by `cosine_similarity`. `retrieve(query, k=3)` returns dictionaries with `source`, `score`, `text`. For the query `refund policy late delivery` the top three chunks all come from `refund_policy.txt` (scores 0.272, 0.251, 0.245).
 
 TF (term frequency) measures how often a word appears in a chunk, so it rewards words that are prominent in that chunk; IDF (inverse document frequency) measures how rare the word is across all chunks, so it down-weights words that appear everywhere. A limitation is that TF-IDF matches exact words only: "money back" and "refund" mean the same but share no words, so a question phrased differently from the policy text can miss the right chunk.
 
-### D3. Augment and answer
+### D3. Augment and answer (`PartD/d3_answer.py`)
 `answer(question)` retrieves three chunks and sends two messages to `mock_llm.chat`: a system message containing POLICY ASSISTANT that tells the model to answer only from the supplied context and to say it could not find the information otherwise, and a user message of the form `CONTEXT:`, then the three chunks each prefixed with `[<source file name>]` on its own line, then `QUESTION:` and the question. It returns the model's text and the sources used.
 
-### D4. Retrieval and grounding evaluation (`data/raw/policy_eval.csv`: 12 answerable, 2 unanswerable)
+### D4. Retrieval and grounding evaluation (`PartD/d4_evaluation.py`; `data/raw/policy_eval.csv`: 12 answerable, 2 unanswerable)
 | Check | Overlap 10 | Overlap 0 |
 |---|---|---|
 | Answerable: expected_doc among top 3 sources | 12/12 | 12/12 |
@@ -360,7 +379,7 @@ TF (term frequency) measures how often a word appears in a chunk, so it rewards 
 
 With overlap 0 two questions break. "What delivery time makes a completed order eligible for a full refund?" fails because one chunk ends "delivered in more than 45 minutes, the customer" and the next starts "receives a full refund of the order amount", so the sentence is cut and the answer is only the fragment without "more than 45 minutes". "How soon is money returned when a payment fails but is deducted?" fails because a chunk ends "the amount is returned automatically" while "within 48 hours" starts the next chunk. The 10-word overlap repeats the end of one chunk at the start of the next, which keeps such sentences whole in at least one chunk.
 
-### D5. Tools
+### D5. Tools (`PartD/d5_tools.py`)
 Five tools with a name, a one-sentence description and a JSON-style parameter specification are kept in `TOOLS_SPEC`; `TOOL_MAP` maps each tool name to its Python function. The model asks for a tool by name with an arguments dictionary; the code looks the name up in `TOOL_MAP` and calls the function with those arguments.
 
 | Tool | What it does |
@@ -373,7 +392,7 @@ Five tools with a name, a one-sentence description and a JSON-style parameter sp
 
 Refund rules implemented: only completed orders can be refunded; delivered in more than 45 minutes is refunded in full; 45 minutes or less pays 0; a refund above INR 1000 is escalated, never issued automatically. All requests are treated as raised inside the 7-day window.
 
-### D6. ReAct loop (`run_agent`, defaults: 6 model calls, 6000 tokens, 10 seconds)
+### D6. ReAct loop (`PartD/d6_react_scenarios.py`; defaults: 6 model calls, 6000 tokens, 10 seconds)
 Messages start with a system message containing AGENT and the user message. Each iteration calls `chat`; a reply without tool calls is the final answer (status = the word before the colon); otherwise an assistant message with `tool_calls` is appended, the tool is executed, and a tool message with the JSON observation is appended. The seven scenarios in `data/raw/agent_scenarios.csv` were run and one JSON line per run was appended to `outputs/agent_runs.jsonl`.
 
 | Scenario | Status | Refund (INR) | Model calls | Tokens used |
@@ -388,7 +407,7 @@ Messages start with a system message containing AGENT and the user message. Each
 
 Every refund amount equals `expected_refund_inr` within 0.01 and S1 takes 5 model calls. S7 (the looping scenario) uses all six model calls and 3,138 estimated tokens, so the default 6000-token limit does not stop it early.
 
-### D7. Stopping safely
+### D7. Stopping safely (`PartD/d7_safe_stops.py`)
 Three limits, each ending in a fallback that returns the steps completed so far and a short human-handoff summary in `final_answer`: (a) after `max_iterations` model calls without a final answer: `FALLBACK_MAX_ITERATIONS`; (b) after each model call `usage.total_tokens` is added to `tokens_used` and if it exceeds `token_limit` the run stops at once without executing the tool just requested: `FALLBACK_TOKEN_LIMIT`; (c) at the top of each iteration, if `time.monotonic()` shows `time_limit_seconds` or more elapsed: `FALLBACK_TIMEOUT`.
 
 | Demonstration | Setting | Status | Detail |
@@ -397,7 +416,7 @@ Three limits, each ending in a fallback that returns the steps completed so far 
 | S1 | `token_limit=200` | FALLBACK_TOKEN_LIMIT | stopped after 3 model calls at 423 tokens; steps done: get_order, search_policy; the requested calculate_refund was not executed |
 | S1 | `time_limit_seconds=0` | FALLBACK_TIMEOUT | stopped before the first model call (0 calls, no steps) |
 
-### D8. Resumable runs
+### D8. Resumable runs (`PartD/d8_resume_run.py`)
 After every tool observation a checkpoint `state/<run_id>.json` is written (run id, scenario id, user message, the full message list, tokens_used, llm_calls, step number, tools executed so far, steps). `resume_agent(run_id)` loads it and continues the same loop. Demonstration with S1: a simulated crash was raised right after the second tool execution (after its checkpoint was saved), then `resume_agent` was called.
 
 | Part of the run | Tools executed (in order) |
@@ -408,7 +427,7 @@ After every tool observation a checkpoint `state/<run_id>.json` is written (run 
 
 Final status REFUND with INR 128.25, 5 model calls in total. The ledger therefore shows order ORD-100048 twice: once for the normal S1 run (`S1-main`) and once for the crash demonstration (`S1-crash-demo`); each ledger line carries its run id. The three demonstration runs are logged in `outputs/agent_demos.jsonl`, so `outputs/agent_runs.jsonl` holds exactly one line per scenario (7).
 
-### D9. ReAct versus plan-and-execute
+### D9. ReAct versus plan-and-execute (`PartD/d9_react_vs_plan.py`)
 ReAct called the model once per step plus a final reply: 5 calls for S1, 3 for S5, 2 for S6, and about 1,000 tokens for S1, because every call re-sends the growing history, including the three policy passages. A plan-and-execute design would ask once for the whole step list and run it, needing roughly 2 calls and fewer tokens for a clean case like S1. Its weakness is the unexpected observation: the plan is written before the order is known. For S6 (NOT_FOUND) or S5 (cancelled order), ReAct stops after 2 or 3 calls with the right answer, whereas a fixed plan would go on to calculate and issue a refund unless code checks every observation and a further model call replans. I would choose ReAct for this refund workflow because every branch (missing order, cancelled order, on-time delivery, amount above INR 1000) depends on what the previous tool returned, and money moves only after those checks. The extra cost is small (at most 5 calls and about 1,000 tokens per request) and is capped by the call, token and time limits and by checkpoints.
 
 

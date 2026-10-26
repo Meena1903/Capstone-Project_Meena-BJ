@@ -1,11 +1,29 @@
-"""A4 - Validate the clean data in data/instamart.db against the brief's checkpoints.
-Run: python PartA/src/a3_validate.py"""
+"""A3 - Store the clean CSVs in SQLite and validate reference checkpoints.
+Run after a2_clean.py: python PartA/src/a3_validate.py"""
 from pathlib import Path
 import sqlite3
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
-con = sqlite3.connect(ROOT / "data/instamart.db")
+DB = ROOT / "data/instamart.db"
+CLEAN = ROOT / "data/clean"
+customers = pd.read_csv(CLEAN / "customers.csv", parse_dates=["signup_date"])
+products = pd.read_csv(CLEAN / "products.csv")
+orders = pd.read_csv(CLEAN / "orders.csv", parse_dates=["order_ts"])
+
+# Store order timestamps as ISO text in SQLite, as required by the SQL tasks.
+customers_db = customers.copy()
+customers_db["signup_date"] = customers_db["signup_date"].dt.strftime("%Y-%m-%d")
+orders_db = orders.copy()
+orders_db["order_ts"] = orders_db["order_ts"].dt.strftime("%Y-%m-%d %H:%M:%S")
+if DB.exists():
+    DB.unlink()
+with sqlite3.connect(DB) as con:
+    customers_db.to_sql("customers", con, index=False)
+    products.to_sql("products", con, index=False)
+    orders_db.to_sql("orders", con, index=False)
+
+con = sqlite3.connect(DB)
 c = pd.read_sql_query("SELECT * FROM customers", con)
 o = pd.read_sql_query("SELECT * FROM orders", con)
 con.close()

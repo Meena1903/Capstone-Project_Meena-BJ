@@ -1,6 +1,4 @@
-"""D1-D4 - Policy RAG: chunking, TF-IDF retrieval, grounded answer(), evaluation (overlap 10 and overlap 0).
-Also imported by the refund agent (d_agent.py) for search_policy.
-Run from repo root:  python d_rag.py"""
+"""Shared policy retrieval helpers used by the independently runnable D1-D4 scripts and D5 agent."""
 import glob, os, sys
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -104,21 +102,3 @@ def evaluate(retriever, label):
         print(f"  BREAKS: {b.q!r} -> doc_ok={b.doc_ok}, fact_ok={b.fact_ok}; reason: {why}")
         print(f"          answer given: {b.answer!r}")
     return df
-
-
-if __name__ == "__main__":
-    pd.set_option("display.width", 140)
-    r10 = Retriever(40, 10)
-    counts = pd.Series([c["source"] for c in r10.chunks]).value_counts().to_dict()
-    print("=== D1. Chunks (40 words, overlap 10) ===")
-    print("total:", len(r10.chunks), counts, "(ref 15: refund 4, delivery 3, escalation 3, payment 3, privacy 2)")
-    print("\n=== D2. retrieve('refund policy late delivery', k=3) ===")
-    for h in r10.retrieve("refund policy late delivery"):
-        print(f"  {h['source']:22s} score={h['score']:.3f}  {h['text'][:70]}...")
-    print("\n=== D3. Example answer ===")
-    t, s = answer("Who must approve a refund above INR 1000?", r10)
-    print("answer:", t, "| sources:", s)
-    evaluate(r10, "D4. Evaluation, overlap 10 (ref 12/12, 12/12, 2/2)")
-    r0 = Retriever(40, 0)
-    print("\nchunks with overlap 0:", len(r0.chunks))
-    evaluate(r0, "D4. Evaluation, overlap 0 (ref: at least one answerable question fails)")

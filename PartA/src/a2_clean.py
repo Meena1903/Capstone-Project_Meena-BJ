@@ -1,11 +1,10 @@
 """A2-A4 - Clean customers + orders, then store CSVs and SQLite DB.
 Run: python PartA/src/a2_clean.py"""
-import os, sqlite3
 from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
-RAW, CLEAN, DB = ROOT / "data/raw", ROOT / "data/clean", ROOT / "data/instamart.db"
+RAW, CLEAN = ROOT / "data/raw", ROOT / "data/clean"
 SUBMISSION_CLEAN = ROOT / "PartA/clean"
 CLEAN.mkdir(parents=True, exist_ok=True)
 SUBMISSION_CLEAN.mkdir(parents=True, exist_ok=True)
@@ -75,29 +74,19 @@ o.loc[fill, "delivery_minutes"] = med[fill]
 # keep the same 9 columns as the raw table (category / price live in products)
 o = o.drop(columns=["price_inr", "category"]).sort_values("order_ts").reset_index(drop=True)
 
-# ======================= STORE =======================
+# ======================= CLEAN OUTPUTS =======================
 c.to_csv(CLEAN / "customers.csv", index=False)
 products.to_csv(CLEAN / "products.csv", index=False)
 o.to_csv(CLEAN / "orders.csv", index=False, date_format="%Y-%m-%d %H:%M:%S")
-# Keep the explicit Part A submission paths in sync with the canonical files
-# consumed by Parts B and D.
+# Keep the explicit Part A clean-data paths in sync with the canonical files
+# consumed by Parts B and D. Database storage is handled by a3_validate.py.
 c.to_csv(SUBMISSION_CLEAN / "customers.csv", index=False)
 products.to_csv(SUBMISSION_CLEAN / "products.csv", index=False)
 o.to_csv(SUBMISSION_CLEAN / "orders.csv", index=False, date_format="%Y-%m-%d %H:%M:%S")
-
-o_db, c_db = o.copy(), c.copy()
-o_db["order_ts"] = o_db["order_ts"].dt.strftime("%Y-%m-%d %H:%M:%S")   # text in DB
-c_db["signup_date"] = c_db["signup_date"].dt.strftime("%Y-%m-%d")
-if DB.exists():
-    DB.unlink()
-with sqlite3.connect(DB) as con:
-    c_db.to_sql("customers", con, index=False)
-    products.to_sql("products", con, index=False)
-    o_db.to_sql("orders", con, index=False)
 
 print("=== CLEANING LOG (copy into README) ===")
 for k, v in log.items():
     print(f"{k:60s} {v}")
 print("\nshapes:", "customers", c.shape, "| orders", o.shape, "| products", products.shape)
 print("status counts:", o["status"].value_counts().to_dict())
-print("saved:", CLEAN / "*.csv", "and", DB)
+print("saved clean CSVs:", CLEAN / "*.csv", "and", SUBMISSION_CLEAN / "*.csv")

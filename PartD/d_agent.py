@@ -1,8 +1,6 @@
-"""D5-D9 - Refund agent: tools, ReAct loop, safe stops, checkpoint/resume.
-Run AFTER d_rag.py (it imports the retrieval), from repo root:  python d_agent.py"""
-import glob, json, os, sqlite3, sys, time
+"""Shared tool, ReAct, safe-stop and checkpoint functions for D5-D9 scripts."""
+import json, os, sqlite3, sys, time
 from datetime import datetime
-import pandas as pd
 
 # Resolve paths relative to this script's location so data/, outputs/, state/
 # and the repo-root mock_llm / d_rag modules are found regardless of the
@@ -171,72 +169,3 @@ def log_run(path, res):
             "steps": [{"tool": s["tool"], "arguments": s["arguments"], "observation": s["observation"]} for s in res["steps"]]}
     with open(path, "a") as f:
         f.write(json.dumps(line) + "\n")
-
-
-# ====================== runs ======================
-if __name__ == "__main__":
-    pd.set_option("display.width", 140)
-    for p in [LEDGER, RUNS, DEMOS] + glob.glob(os.path.join(STATE_DIR, "*.json")):
-        if os.path.exists(p):
-            os.remove(p)                                                           # clean, reproducible re-run
-
-    sc = pd.read_csv(os.path.join(DATA_DIR, "raw", "agent_scenarios.csv"))
-    rows = []
-    print("=== D6. Seven scenarios (default limits: 6 calls, 6000 tokens, 10 s) ===")
-    for _, r in sc.iterrows():
-        res = run_agent(r["message"], r["scenario_id"], run_id=f"{r['scenario_id']}-main")
-        log_run(RUNS, res)
-        exp = r["expected_outcome"]
-        ok_status = res["status"].startswith("FALLBACK") if exp == "FALLBACK" else res["status"] == exp
-        ok_amt = abs(res["refund_inr"] - float(r["expected_refund_inr"])) <= 0.01
-        rows.append({"scenario": r["scenario_id"], "status": res["status"], "refund_inr": round(res["refund_inr"], 2),
-                     "expected": exp, "expected_refund": float(r["expected_refund_inr"]),
-                     "model_calls": res["llm_calls"], "tokens": res["tokens_used"], "OK": ok_status and ok_amt})
-    table = pd.DataFrame(rows)
-    print(table.to_string(index=False))
-    print("(ref: S1 REFUND 128.25 in 5 calls, S2 REFUND 135.00, S3 ESCALATE 1999.00, S4 DENIED, S5 DENIED, S6 NOT_FOUND, S7 FALLBACK)")
-    print("\nS5 / S6 example final answers:")
-    for sid in ("S1", "S3", "S5", "S6"):
-        line = [json.loads(l) for l in open(RUNS) if json.loads(l)["scenario_id"] == sid][0]
-        print(f"  {sid}: {line['final_answer']}")
-
-    s1 = sc[sc.scenario_id == "S1"].iloc[0]["message"]
-    print("\n=== D7. Stop safely ===")
-    d1 = run_agent(s1, "S1", token_limit=200, run_id="S1-token-limit-demo")
-    log_run(DEMOS, d1)
-    print(f"(b) S1 with token_limit=200 -> {d1['status']} after {d1['llm_calls']} calls, {d1['tokens_used']} tokens, steps done: {[s['tool'] for s in d1['steps']]}")
-    print("    handoff:", d1["final_answer"])
-    d2 = run_agent(s1, "S1", time_limit_seconds=0, run_id="S1-timeout-demo")
-    log_run(DEMOS, d2)
-    print(f"(c) S1 with time_limit_seconds=0 -> {d2['status']} after {d2['llm_calls']} model calls")
-    print("    handoff:", d2["final_answer"])
-    s7 = table[table.scenario == "S7"].iloc[0]
-    print(f"(a) S7 default limits -> {s7['status']} after {s7['model_calls']} calls, {s7['tokens']} tokens (limit 6000: not stopped early)")
-
-    print("\n=== D8. Crash and resume (S1) ===")
-    first = []
-    try:
-        run_agent(s1, "S1", run_id="S1-crash-demo", crash_after_tools=2)
-    except SimulatedCrash as e:
-        print("crash:", e)
-    with open(os.path.join(STATE_DIR, "S1-crash-demo.json")) as f:
-        cp = json.load(f)
-    before = list(cp["tools_executed"])
-    print("checkpoint keys:", sorted(cp.keys()))
-    print("tools executed before the crash:", before)
-    res = resume_agent("S1-crash-demo")
-    log_run(DEMOS, res)
-    after = [s["tool"] for s in res["steps"]][len(before):]
-    print("tools executed after the resume:", after)
-    allt = before + after
-    print("all tools across crash + resume:", allt)
-    print("final:", res["status"], res["refund_inr"], "| llm_calls (total):", res["llm_calls"])
-    assert allt == ["get_order", "search_policy", "calculate_refund", "issue_refund"] and res["status"] == "REFUND"
-    assert abs(res["refund_inr"] - 128.25) < 0.01
-    print("CRASH-AND-RESUME CHECK PASSED (4 tools, none repeated, REFUND 128.25)")
-
-    print("\nfiles:", RUNS, "lines:", sum(1 for _ in open(RUNS)), "| ledger lines:", sum(1 for _ in open(LEDGER)),
-          "| checkpoints in state/:", len(glob.glob(os.path.join(STATE_DIR, '*.json'))))
-    print("\nLedger:")
-    for l in open(LEDGER):
-        print(" ", l.strip())
